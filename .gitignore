@@ -46,3 +46,14 @@ MetroEX_*/
 *.bak
 *.ipdb
 *.iobj
+
+# The ready-to-run Windows build is committed deliberately - see release/README.md.
+# These have to override the *.exe and _build rules above, so they come last.
+!release/
+!release/**
+
+# ...and so do the FBX SDK binaries, otherwise a fresh clone has the headers but
+# nothing to link against. The 'x64' rule above would swallow the whole directory,
+# so the directory itself has to be un-ignored before anything inside it can be.
+!libs/fbx/lib/x64/
+!libs/fbx/lib/x64/**

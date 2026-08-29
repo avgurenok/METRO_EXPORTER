@@ -1,0 +1,9 @@
+# Git guesses well enough on its own, but the shipped build is the one thing in here
+# that would be silently ruined by a line-ending conversion, so say it outright.
+*.exe   binary
+*.dll   binary
+*.lib   binary
+*.ico   binary
+*.pdf   binary
+*.png   binary
+*.mex   binary
