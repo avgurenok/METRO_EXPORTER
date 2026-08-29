@@ -1,0 +1,48 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Compiled Shader files
+*.cso
+
+# Precompiled Headers
+*.gch
+*.pch
+src/shaders/*.h
+
+# Executables
+*.exe
+*.out
+*.app
+
+# configs
+*.user
+
+# resources
+res.aps
+
+# folders
+.vs
+x64
+_build
+
+# The game's own data. This is an 8 GB copy of Metro 2033 Redux that lives here only so
+# the extractor has something to read - it is Deep Silver's, not ours, and GitHub would
+# refuse the files anyway.
+Metro 2033 Redux/
+
+# A prebuilt copy of an older build of this program, dropped in for comparison. Binaries,
+# not source.
+MetroEX_полуработающая программа/
+MetroEX_*/
+
+# build leftovers
+*.pdb
+*.bak
+*.ipdb
+*.iobj
