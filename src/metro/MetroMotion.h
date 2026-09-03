@@ -33,6 +33,12 @@ public:
     quat                    GetBoneRotation(const size_t boneIdx, const size_t key) const;
     vec3                    GetBonePosition(const size_t boneIdx, const size_t key) const;
 
+    // Slides a bone's whole position curve so its first key sits at the given bind position,
+    // leaving it alone when the first key is already within onlyIfFurtherThan of it. Returns
+    // how far the curve moved, which is zero when it was left alone.
+    float                   AnchorBonePosition(const size_t boneIdx, const vec3& bindPosition,
+                                               const float onlyIfFurtherThan = 0.0f);
+
 //private:
     bool                    LoadInternal();
     void                    ReadAttributeCurve(const uint8_t* curveData, AttributeCurve& curve, const size_t attribSize, const bool bigEndian);
@@ -64,6 +70,8 @@ public:
     size_t                  mMaskBytes;
     // bones this motion actually animates, taken from the data block header
     Bitset256               mMotionBonesMask;
+    // curves whose offset resolved to nothing decodable - those bones hold their bind pose
+    size_t                  mRefusedCurves;
     // data
     BytesArray              mMotionsData;
     // curves

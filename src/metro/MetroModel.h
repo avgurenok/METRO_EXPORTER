@@ -12,8 +12,13 @@ public:
     ~MetroModel();
 
     bool                    LoadFromData(MemStream& stream, VFXReader* vfxReader, const size_t fileIdx);
+
+    // Builds a model out of a whole level's geometry, so that everything the exporter already
+    // does for a .model - materials, textures, units, embedding - applies to a map unchanged.
+    bool                    LoadFromLevel(VFXReader* vfxReader, const size_t descriptionFileIdx);
     bool                    SaveAsOBJ(const fs::path& filePath, VFXReader* vfxReader, MetroTexturesDatabase* database);
-    bool                    SaveAsFBX(const fs::path& filePath, VFXReader* vfxReader, MetroTexturesDatabase* database, const bool withAnims);
+    bool                    SaveAsFBX(const fs::path& filePath, VFXReader* vfxReader, MetroTexturesDatabase* database,
+                                      const bool withAnims, const bool embedTextures = true);
 
     bool                    IsAnimated() const;
     const AABBox&           GetBBox() const;

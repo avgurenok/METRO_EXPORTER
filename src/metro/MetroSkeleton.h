@@ -34,6 +34,7 @@ public:
     bool                    LoadFromData(MemStream& stream);
 
     size_t                  GetNumBones() const;
+    uint32_t                GetBonesCRC() const;
     const quat&             GetBoneRotation(const size_t idx) const;
     const vec3&             GetBonePosition(const size_t idx) const;
     mat4                    GetBoneTransform(const size_t idx) const;

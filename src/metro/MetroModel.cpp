@@ -4,6 +4,7 @@
 #include "MetroTexture.h"
 #include "MetroSkeleton.h"
 #include "MetroMotion.h"
+#include "MetroLevel.h"
 
 #define FBXSDK_NEW_API
 #define FBXSDK_SHARED
@@ -76,6 +77,27 @@ MetroModel::~MetroModel() {
     std::for_each(mMeshes.begin(), mMeshes.end(), [](MetroMesh* mesh) { delete mesh; });
     std::for_each(mMotions.begin(), mMotions.end(), [](MetroMotion* motion) { delete motion; });
     MySafeDelete(mSkeleton);
+}
+
+bool MetroModel::LoadFromLevel(VFXReader* vfxReader, const size_t descriptionFileIdx) {
+    MetroLevel level;
+    if (!level.LoadFromData(vfxReader, descriptionFileIdx)) {
+        return false;
+    }
+
+    mVFXReader = vfxReader;
+    mThisFileIdx = descriptionFileIdx;
+
+    std::for_each(mMeshes.begin(), mMeshes.end(), [](MetroMesh* m) { delete m; });
+    mMeshes = level.DetachMeshes();
+
+    mBBox = level.GetBBox();
+
+    const vec3 centre = mBBox.Center();
+    const vec3 extent = mBBox.maximum - centre;
+    mBSphere = vec4(centre, Length(extent));
+
+    return !mMeshes.empty();
 }
 
 bool MetroModel::LoadFromData(MemStream& stream, VFXReader* vfxReader, const size_t fileIdx) {
@@ -563,7 +585,8 @@ static void AddAnimTrackToScene(FbxScene* scene, const MetroMotion* motion, cons
     CorrectAnimTrackInterpolation(skelNodes, animLayer);
 }
 
-bool MetroModel::SaveAsFBX(const fs::path& filePath, VFXReader* vfxReader, MetroTexturesDatabase* database, const bool withAnims) {
+bool MetroModel::SaveAsFBX(const fs::path& filePath, VFXReader* vfxReader, MetroTexturesDatabase* database,
+                           const bool withAnims, const bool embedTextures) {
     FbxManager* mgr = FbxManager::Create();
     if (!mgr) {
         return false;
@@ -809,7 +832,12 @@ bool MetroModel::SaveAsFBX(const fs::path& filePath, VFXReader* vfxReader, Metro
     //          written next to it, but embedding means the material survives the file being
     //          moved, mailed or dropped into a project on its own - which is the whole point
     //          of "the materials just work".
-    ios->SetBoolProp(EXP_FBX_EMBEDDED, true);
+    //
+    //          A whole map is the exception: it names over a hundred textures, and embedding
+    //          those turned a 30 MB export into 262 MB, of which Blender then failed to unpack
+    //          the normal maps at all. The sidecar files are right beside it, so a level is
+    //          exported plain.
+    ios->SetBoolProp(EXP_FBX_EMBEDDED, embedTextures);
     ios->SetBoolProp(EXP_FBX_SHAPE, true);
     ios->SetBoolProp(EXP_FBX_GOBO, true);
     ios->SetBoolProp(EXP_FBX_ANIMATION, withAnims);
@@ -1189,7 +1217,17 @@ void MetroModel::LoadMotions() {
 
     mMotions.reserve(motionFiles.size());
 
-    size_t i = 0;
+    //#NOTE_SK: the root bones are where a level animation hides its world placement, so they
+    //          are the ones worth re-anchoring. A skeleton can have more than one root.
+    MyArray<size_t> rootBones;
+    for (size_t b = 0; b < numBones; ++b) {
+        if (mSkeleton->GetBoneParentIdx(b) == MetroBone::InvalidIdx) {
+            rootBones.push_back(b);
+        }
+    }
+
+    size_t i = 0, reAnchored = 0, wrongSkeleton = 0;
+    float furthest = 0.0f;
     for (const size_t idx : motionFiles) {
         MemStream stream = mVFXReader->ExtractFile(idx);
         if (stream) {
@@ -1198,13 +1236,54 @@ void MetroModel::LoadMotions() {
 
             MetroMotion* motion = new MetroMotion(motionName);
             motion->SetPath(motionPaths[i]);
-            if (motion->LoadFromData(stream) && motion->GetNumBones() == numBones) {
+
+            //#NOTE_SK: a motions folder is shared, and can hold motions built for a different
+            //          skeleton that happens to have the same number of bones. Matching the
+            //          bone count alone would let those through to be applied bone by bone to
+            //          a skeleton they were never meant for.
+            const bool loaded = motion->LoadFromData(stream);
+            const bool rightShape = loaded && motion->GetNumBones() == numBones;
+            const bool rightSkeleton = rightShape && scast<uint32_t>(motion->GetBonesCRC()) == mSkeleton->GetBonesCRC();
+
+            if (rightSkeleton) {
+                float shifted = 0.0f;
+                for (const size_t rb : rootBones) {
+                    shifted = std::max(shifted, motion->AnchorBonePosition(rb, mSkeleton->GetBonePosition(rb)));
+                }
+
+                //#NOTE_SK: a handful of motions hang the placement on a bone that is not a
+                //          root. A bone's translation is measured from its parent, so a limb
+                //          cannot honestly sit hundreds of metres away - anything past this
+                //          is a level coordinate that wandered in, never a pose.
+                const float kImpossibleBoneOffset = 10.0f;
+                for (size_t b = 0; b < numBones; ++b) {
+                    shifted = std::max(shifted, motion->AnchorBonePosition(b, mSkeleton->GetBonePosition(b),
+                                                                          kImpossibleBoneOffset));
+                }
+
+                if (shifted > 1.0f) {
+                    ++reAnchored;
+                    furthest = std::max(furthest, shifted);
+                }
+
                 mMotions.push_back(motion);
             } else {
+                if (rightShape) {
+                    ++wrongSkeleton;
+                }
                 MySafeDelete(motion);
             }
         }
         ++i;
     }
+
     LogPrintF(LogLevel::Info, "LoadMotions: kept %zu motions", mMotions.size());
+    if (wrongSkeleton) {
+        LogPrintF(LogLevel::Warning, "LoadMotions: %zu motions belong to another skeleton and were skipped", wrongSkeleton);
+    }
+    if (reAnchored) {
+        LogPrintF(LogLevel::Info,
+                  "LoadMotions: %zu motions carried a level placement in their root bone and were re-anchored (furthest was %.1f m)",
+                  reAnchored, furthest);
+    }
 }

@@ -3,15 +3,18 @@
 
 class VFXReader;
 
+//#NOTE_SK: a level's geometry lives in two files side by side. The one named "level" describes
+//          it - a material table and a list of sections, each naming a slice of the buffers -
+//          and "level.geom_pc" holds one shared vertex buffer and one shared index buffer for
+//          the whole map. Metro 2033 Redux writes a 20 byte section record; Exodus writes 28,
+//          the extra two fields being its shadow geometry.
 PACKED_STRUCT_BEGIN
-struct GeomObjectInfo {     // size = 28
+struct LevelSectionInfo {   // 20 bytes
     uint32_t    vertexType;
     uint32_t    vbOffset;
     uint32_t    numVertices;
-    uint32_t    numShadowVertices;
     uint32_t    ibOffset;
     uint32_t    numIndices;
-    uint32_t    numShadowIndices;
 } PACKED_STRUCT_END;
 
 class MetroLevel {
@@ -19,16 +22,31 @@ public:
     MetroLevel();
     ~MetroLevel();
 
-    bool                LoadFromData(const uint8_t* data, const size_t length, VFXReader* vfxReader, const size_t fileIdx);
+    // descriptionFileIdx is the level's "level" file; the geometry is found next to it
+    bool                LoadFromData(VFXReader* vfxReader, const size_t descriptionFileIdx);
 
     size_t              GetNumMeshes() const;
     const MetroMesh*    GetMesh(const size_t idx) const;
+    // hands the meshes over to the caller and forgets them, so a MetroModel can adopt them
+    // and reuse everything the model exporter already knows how to do
+    MyArray<MetroMesh*> DetachMeshes();
+
+    const AABBox&       GetBBox() const;
+    size_t              GetNumSections() const;
+    size_t              GetNumTriangles() const;
 
 private:
-    void                ReadGeometryDescription(MemStream& stream, MyArray<GeomObjectInfo>& infos);
-    void                ReadGeomObjectInfo(MemStream& stream, GeomObjectInfo& info);
-    void                ReadLevelGeometry(MemStream& stream, const MyArray<GeomObjectInfo>& infos);
+    bool                ReadDescription(MemStream& stream);
+    bool                ReadGeometry(MemStream& stream);
+    void                BuildMeshes();
 
 private:
-    MyArray<MetroMesh*>   mMeshes;
+    StringArray               mMaterials;       // texture name per material
+    MyArray<LevelSectionInfo> mSections;
+    MyArray<uint16_t>         mSectionMaterial;
+    BytesArray                mVertexBuffer;
+    BytesArray                mIndexBuffer;
+    MyArray<MetroMesh*>       mMeshes;
+    AABBox                    mBBox;
+    size_t                    mNumTriangles;
 };

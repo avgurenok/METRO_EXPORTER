@@ -72,6 +72,12 @@ size_t MetroSkeleton::GetNumBones() const {
     return this->bones.size();
 }
 
+// The motions folders are shared, so a folder can hold motions built for a different
+// skeleton that happens to have the same number of bones. Only the CRC tells them apart.
+uint32_t MetroSkeleton::GetBonesCRC() const {
+    return this->crc;
+}
+
 const quat& MetroSkeleton::GetBoneRotation(const size_t idx) const {
     return this->bones[idx].q;
 }

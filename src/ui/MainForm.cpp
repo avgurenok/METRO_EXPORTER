@@ -108,6 +108,11 @@ namespace MetroEX {
             result = FileType::Sound;
         } else if (name->EndsWith(L"lightmaps")) {
             result = exodusAssets ? FileType::Level : FileType::Unknown;
+        } else if (name->Equals(L"level")) {
+            //#NOTE_SK: a Redux map is a file called exactly "level" describing the sections,
+            //          with "level.geom_pc" holding the geometry beside it. Extracting the
+            //          raw file was all this could do before, which is no use to anyone.
+            result = FileType::Level;
         }
 
         return result;
@@ -385,7 +390,11 @@ namespace MetroEX {
                         this->ctxMenuExportTexture->Show(this->treeView1, e->X, e->Y);
                     } break;
 
-                    case FileType::Model: {
+                    case FileType::Model:
+                    //#NOTE_SK: a level exports through the very same path - it is turned into
+                    //          a model made of the map's geometry, so it gets the materials,
+                    //          the textures and the units for free.
+                    case FileType::Level: {
                         this->ctxMenuExportModel->Show(this->treeView1, e->X, e->Y);
                     } break;
 
@@ -894,6 +903,16 @@ namespace MetroEX {
                 }
             } break;
 
+            case FileType::Level: {
+                //#NOTE_SK: every map's file is called "level" - it is the folder that says
+                //          which one, so offering "level.fbx" would be useless.
+                const MetroFile* folder = mVFXReader ? mVFXReader->GetParentFolder(ctx.fileIdx) : nullptr;
+                if (folder && !folder->name.empty()) {
+                    name = folder->name;
+                }
+                name += ctx.mdlSaveAsObj ? ".obj" : ".fbx";
+            } break;
+
             case FileType::Sound: {
                 if (ctx.sndSaveAsOgg) {
                     name[name.size() - 3] = 'o';
@@ -1088,6 +1107,20 @@ namespace MetroEX {
         }
 
         if (!resultPath.empty()) {
+            if (ctx.type == FileType::Level) {
+                MetroModel mdl;
+                if (mdl.LoadFromLevel(mVFXReader, ctx.fileIdx)) {
+                    if (ctx.mdlSaveAsObj) {
+                        mdl.SaveAsOBJ(resultPath, mVFXReader, mTexturesDatabase);
+                    } else {
+                        mdl.SaveAsFBX(resultPath, mVFXReader, mTexturesDatabase, false, false);
+                    }
+                    result = true;
+                }
+
+                return result;
+            }
+
             MemStream& stream = mVFXReader->ExtractFile(ctx.fileIdx);
             if (stream) {
                 MetroModel mdl;
