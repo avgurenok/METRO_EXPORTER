@@ -23,7 +23,8 @@ public:
     ~MetroLevel();
 
     // descriptionFileIdx is the level's "level" file; the geometry is found next to it
-    bool                LoadFromData(VFXReader* vfxReader, const size_t descriptionFileIdx);
+    bool                LoadFromData(VFXReader* vfxReader, const size_t descriptionFileIdx,
+                                     const bool withPlacedObjects = true);
 
     size_t              GetNumMeshes() const;
     const MetroMesh*    GetMesh(const size_t idx) const;
@@ -34,11 +35,14 @@ public:
     const AABBox&       GetBBox() const;
     size_t              GetNumSections() const;
     size_t              GetNumTriangles() const;
+    size_t              GetNumPlacedObjects() const;
+    size_t              GetNumUnplacedRefs() const;
 
 private:
     bool                ReadDescription(MemStream& stream);
     bool                ReadGeometry(MemStream& stream);
     void                BuildMeshes();
+    void                ReadPlacedObjects(VFXReader* vfxReader, const MetroFile* folder);
 
 private:
     StringArray               mMaterials;       // texture name per material
@@ -49,4 +53,6 @@ private:
     MyArray<MetroMesh*>       mMeshes;
     AABBox                    mBBox;
     size_t                    mNumTriangles;
+    size_t                    mNumPlacedObjects;
+    size_t                    mNumUnplacedRefs;
 };

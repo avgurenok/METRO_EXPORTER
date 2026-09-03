@@ -100,7 +100,7 @@ bool MetroModel::LoadFromLevel(VFXReader* vfxReader, const size_t descriptionFil
     return !mMeshes.empty();
 }
 
-bool MetroModel::LoadFromData(MemStream& stream, VFXReader* vfxReader, const size_t fileIdx) {
+bool MetroModel::LoadFromData(MemStream& stream, VFXReader* vfxReader, const size_t fileIdx, const bool loadMotions) {
     bool result = false;
 
     mVFXReader = vfxReader;
@@ -109,7 +109,11 @@ bool MetroModel::LoadFromData(MemStream& stream, VFXReader* vfxReader, const siz
 
     this->ReadSubChunks(stream);
 
-    this->LoadMotions();
+    //#NOTE_SK: a level places hundreds of props, and every one of them would otherwise drag
+    //          in its whole animation library. The level exporter asks for geometry only.
+    if (loadMotions) {
+        this->LoadMotions();
+    }
 
     result = !mParseError && !mMeshes.empty();
 
@@ -689,7 +693,7 @@ bool MetroModel::SaveAsFBX(const fs::path& filePath, VFXReader* vfxReader, Metro
             continue;
         }
 
-        CharString meshName = CharString("mesh_") + std::to_string(i);
+        CharString meshName = mesh->name.empty() ? (CharString("mesh_") + std::to_string(i)) : mesh->name;
 
         FbxMesh* fbxMesh = FbxMesh::Create(scene, meshName.c_str());
 

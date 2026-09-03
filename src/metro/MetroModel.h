@@ -11,7 +11,8 @@ public:
     MetroModel();
     ~MetroModel();
 
-    bool                    LoadFromData(MemStream& stream, VFXReader* vfxReader, const size_t fileIdx);
+    bool                    LoadFromData(MemStream& stream, VFXReader* vfxReader, const size_t fileIdx,
+                                         const bool loadMotions = true);
 
     // Builds a model out of a whole level's geometry, so that everything the exporter already
     // does for a .model - materials, textures, units, embedding - applies to a map unchanged.

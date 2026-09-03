@@ -101,6 +101,8 @@ struct MetroVertex {
 } PACKED_STRUCT_END;
 
 struct MetroMesh {
+    // what to call this thing in the exported file; "mesh_N" is used when it is empty
+    CharString           name;
     bool                 skinned;
     float                vscale;
     AABBox               bbox;
