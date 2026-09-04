@@ -294,43 +294,84 @@ void MetroLevel::ReadPlacedObjects(VFXReader* vfxReader, const MetroFile* folder
     placements.reserve(refs.size());
     size_t offMapRejects = 0;
 
+    //#NOTE_SK: the transform sits BEFORE the model reference, at a fixed distance, and getting
+    //          this backwards is what put every object on the map in the wrong place.
+    //
+    //          Searching forwards - which is what this did at first - walks straight into the
+    //          NEXT entity's matrix. There is always one close by to grab: l02_exhibition holds
+    //          3913 transforms against 547 model references, the rest belonging to lights,
+    //          triggers and spawn points. So every object wore some later entity's position and
+    //          the map came out scattered, some pieces a hundred metres from where they belong.
+    //
+    //          Measured over all 28 maps, backwards: 22395 of 31913 references have their
+    //          matrix at exactly -184 bytes and another 4873 at -188 - 85% at two fixed offsets.
+    //          Forwards the same references produce 69 different offsets covering two thirds.
+    //          Taking the fixed offsets first and only then looking nearby keeps a record from
+    //          ever reaching into its neighbour.
+    //
+    //          The mistake survived my checks because none of them actually tested position:
+    //          an upright barrel stays upright whichever upright matrix you hand it, and every
+    //          wrong matrix still belonged to something standing somewhere on the same map.
+    //          What does test it is that lamps hang and people stand - read this way the
+    //          characters on l02_exhibition come out at -0.01 m, exactly on the floor, and the
+    //          lamps at 2.05 m; read forwards the characters floated 0.89 m off the ground.
+    static const int kFixedOffsets[] = { -184, -188 };
+    static const int kNearestWindowFrom = -160;
+    static const int kNearestWindowTo   = -320;
+
     for (size_t i = 0; i < refs.size(); ++i) {
         const size_t at = refs[i];
-        const size_t limit = ((i + 1) < refs.size()) ? refs[i + 1] : bin.size();
 
+        // never reach back past the previous reference - that matrix belongs to that record
+        const long long floorPos = (i > 0) ? scast<long long>(refs[i - 1] + sizeof(uint32_t)) : 0;
+
+        vec3 a0, a1, a2, t;
         bool found = false;
-        for (size_t pos = at + sizeof(uint32_t); (pos + 48) <= bin.size() && pos < limit; ++pos) {
-            vec3 a0, a1, a2, t;
-            if (ReadTransform(bin.data() + pos, a0, a1, a2, t)) {
-                const vec3 where = MetroSwizzle(t);
-                if (where.x < allowedMin.x || where.x > allowedMax.x ||
-                    where.y < allowedMin.y || where.y > allowedMax.y ||
-                    where.z < allowedMin.z || where.z > allowedMax.z) {
-                    ++offMapRejects;
-                    continue;
-                }
 
-                PlacedObject po;
-                po.modelFileIdx = modelsByHash[*rcast<const uint32_t*>(bin.data() + at)];
-
-                //#NOTE_SK: model vertices come out of ConvertVertex already swizzled, and the
-                //          transform is in the game's own axis order. Swizzling is a swap of
-                //          x and z, so the axes have to be swizzled themselves and the first
-                //          and last of them exchanged for the two to line up.
-                po.axisX = MetroSwizzle(a2);
-                po.axisY = MetroSwizzle(a1);
-                po.axisZ = MetroSwizzle(a0);
-                po.position = MetroSwizzle(t);
-
-                placements.push_back(po);
-                found = true;
-                break;
+        auto tryAt = [&](const int delta) -> bool {
+            const long long pos = scast<long long>(at) + delta;
+            if (pos < floorPos || (pos + 48) > scast<long long>(bin.size())) {
+                return false;
             }
+            if (!ReadTransform(bin.data() + pos, a0, a1, a2, t)) {
+                return false;
+            }
+            const vec3 where = MetroSwizzle(t);
+            if (where.x < allowedMin.x || where.x > allowedMax.x ||
+                where.y < allowedMin.y || where.y > allowedMax.y ||
+                where.z < allowedMin.z || where.z > allowedMax.z) {
+                ++offMapRejects;
+                return false;
+            }
+            return true;
+        };
+
+        for (const int delta : kFixedOffsets) {
+            if (tryAt(delta)) { found = true; break; }
+        }
+
+        // a small minority of records carry a field or two more; look close by, never far
+        for (int delta = kNearestWindowFrom; !found && delta >= kNearestWindowTo; --delta) {
+            if (tryAt(delta)) { found = true; }
         }
 
         if (!found) {
             ++mNumUnplacedRefs;
+            continue;
         }
+
+        PlacedObject po;
+        po.modelFileIdx = modelsByHash[*rcast<const uint32_t*>(bin.data() + at)];
+
+        //#NOTE_SK: model vertices come out of ConvertVertex already swizzled, and the transform
+        //          is in the game's own axis order. Swizzling is a swap of x and z, so the axes
+        //          have to be swizzled themselves and the first and last exchanged to match.
+        po.axisX = MetroSwizzle(a2);
+        po.axisY = MetroSwizzle(a1);
+        po.axisZ = MetroSwizzle(a0);
+        po.position = MetroSwizzle(t);
+
+        placements.push_back(po);
     }
 
     LogPrintF(LogLevel::Info, "level: %zu model references in level.bin, %zu of them placed",
